@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ESP Datalogging Firebase App</title>
+
+    <!-- include Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/8.8.1/firebase-app.js"></script>
+
+    <!-- include only the Firebase features as you need -->
+    <script src="https://www.gstatic.com/firebasejs/8.8.1/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.8.1/firebase-database.js"></script>
+
+    <script>
+      // Replace with your app config object
+      const firebaseConfig = {
+        apiKey: "",
+        authDomain: "",
+        databaseURL: "",
+        projectId: "",
+        storageBucket: "",
+        messagingSenderId: "",
+        appId: "",
+      };
+
+      // Initialize firebase
+      firebase.initializeApp(firebaseConfig);
+
+      // Make auth and database references
+      const auth = firebase.auth();
+      const db = firebase.database();
+    </script>
+
+    <!-- include highchartsjs to build the charts-->
+    <script src="https://code.highcharts.com/highcharts.js"></script>
+    <!-- include to use jquery-->
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+    <!--include icons from fontawesome-->
+    <link
+      rel="stylesheet"
+      href="https://use.fontawesome.com/releases/v5.7.2/css/all.css"
+      integrity="sha384-fnmOCqbTlWIlj8LyTjo7mOUStjsKC4pOpQbqyi7RrhN7udi9RwhKkMHpvLbHG9Sr"
+      crossorigin="anonymous" />
+
+    <!--reference for favicon-->
+    <link rel="icon" type="image/png" href="favicon.png" />
+    <!--reference a stylesheet-->
+    <link rel="stylesheet" type="text/css" href="style.css" />
+  </head>
+
+  <body>
+    <!--TOP BAR-->
+    <div class="topnav">
+      <h1>GAS Sensor Readings App <i class="fas fa-clipboard-list"></i></h1>
+    </div>
+
+    <!--AUTHENTICATION BAR (USER DETAILS/LOGOUT BUTTON)-->
+    <div id="authentication-bar" style="display: none">
+      <p>
+        <span id="authentication-status">User logged in</span>
+        <span id="user-details">USEREMAIL</span>
+        <a href="/" id="logout-link">(logout)</a>
+      </p>
+    </div>
+
+    <!--LOGIN FORM-->
+    <form id="login-form" style="display: none">
+      <div class="form-elements-container">
+        <label for="input-email"><b>Email</b></label>
+        <input
+          type="text"
+          placeholder="Enter Username"
+          id="input-email"
+          required />
+
+        <label for="input-password"><b>Password</b></label>
+        <input
+          type="password"
+          placeholder="Enter Password"
+          id="input-password"
+          required />
+
+        <button type="submit" id="login-button">Login</button>
+        <p id="error-message" style="color: red"></p>
+      </div>
+    </form>
+
+    <!--CONTENT (SENSOR READINGS)-->
+    <div class="content-sign-in" id="content-sign-in" style="display: none">
+      <!--LAST UPDATE-->
+      <p>
+        <span class="date-time"
+          >Last update: <span id="lastUpdate"></span
+        ></span>
+      </p>
+      <p>
+        Cards:
+        <input
+          type="checkbox"
+          id="cards-checkbox"
+          name="cards-checkbox"
+          checked />
+        Charts:
+        <input
+          type="checkbox"
+          id="charts-checkbox"
+          name="charts-checkbox"
+          unchecked />
+      </p>
+      <div id="cards-div">
+        <div class="cards">
+          <!--Alcohol-->
+          <div class="card">
+            <p><i class="fas fa-cloud" style="color: #059e8a"></i> ALCOHOL</p>
+            <p>
+              <span class="reading"><span id="alc"></span> PPM</span>
+            </p>
+          </div>
+          <!--CO-->
+          <div class="card">
+            <p><i class="fas fa-cloud" style="color: #059e8a"></i> CO</p>
+            <p>
+              <span class="reading"><span id="co"></span> PPM</span>
+            </p>
+          </div>
+          <!--H2-->
+          <div class="card">
+            <p><i class="fas fa-cloud" style="color: #059e8a"></i> H2</p>
+            <p>
+              <span class="reading"><span id="h2"></span> PPM</span>
+            </p>
+          </div>
+          <!--LPG-->
+          <div class="card">
+            <p><i class="fas fa-cloud" style="color: #059e8a"></i> LPG</p>
+            <p>
+              <span class="reading"><span id="lpg"></span> PPM</span>
+            </p>
+          </div>
+          <!--Prop-->
+          <div class="card">
+            <p><i class="fas fa-cloud" style="color: #059e8a"></i> Propane</p>
+            <p>
+              <span class="reading"><span id="prop"></span> PPM</span>
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <!--CHARTS-->
+      <div id="charts-div" style="display: none">
+        <!--SET NUMBER OF READINGS INPUT FIELD-->
+        <div>
+          <p>Number of readings: <input type="number" id="charts-range" /></p>
+        </div>
+        <!--TEMPERATURE-CHART-->
+        <div class="cards">
+          <div class="card">
+            <p>
+              <i class="fas fa-beer" style="color: #059e8a"></i> MQ2
+              CONCENTRATION CHART
+            </p>
+            <div id="chart-temperature" class="chart-container"></div>
+          </div>
+        </div>
+      </div>
+
+      <!--BUTTONS TO HANDLE DATA-->
+      <p>
+        <!--View data button-->
+        <button id="view-data-button">View all data</button>
+        <!--Hide data button-->
+        <button id="hide-data-button" style="display: none">Hide data</button>
+        <!--Delete data button-->
+        <button id="delete-button" class="deletebtn">Delete data</button>
+      </p>
+      <!--Modal to delete data-->
+      <div id="delete-modal" class="modal" sytle="display:none">
+        <span
+          onclick="document.getElementById('delete-modal').style.display='none'"
+          class="close"
+          title="Close Modal"
+          >×</span
+        >
+        <form id="delete-data-form" class="modal-content" action="/">
+          <div class="container">
+            <h1>Delete Data</h1>
+            <p>Are you sure you want to delete all data from database?</p>
+            <div class="clearfix">
+              <button
+                type="button"
+                onclick="document.getElementById('delete-modal').style.display='none'"
+                class="cancelbtn">
+                Cancel
+              </button>
+              <button
+                type="submit"
+                onclick="document.getElementById('delete-modal').style.display='none'"
+                class="deletebtn">
+                Delete
+              </button>
+            </div>
+          </div>
+        </form>
+      </div>
+
+      <!--TABLE WITH ALL DATA-->
+      <div class="cards">
+        <div class="card" id="table-container" style="display: none">
+          <table id="readings-table">
+            <tr id="theader">
+              <th>No</th>
+              <th>Timestamp</th>
+              <th>Alcohol (PPM)</th>
+              <th>CO (PPM)</th>
+              <th>H2 (PPM)</th>
+              <th>LPG (PPM)</th>
+              <th>Prop (PPM)</th>
+            </tr>
+            <tbody id="tbody"></tbody>
+          </table>
+          <p>
+            <button id="load-data" style="display: none">
+              More results...
+            </button>
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <!--INCLUDE JS FILES-->
+    <script src="scripts/auth.js"></script>
+    <script src="scripts/charts-definition.js"></script>
+    <script src="scripts/index.js"></script>
+  </body>
+</html>
