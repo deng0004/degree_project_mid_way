@@ -6,5 +6,7 @@ The result of the website should look like here: (https://youtu.be/HpuVoApLyKI).
 
 The aim of this project is to monitor the chemical gases produced from beer. 
 
-
+This is an example of our project.
 ![image](https://user-images.githubusercontent.com/118713625/230039753-0c7cd96a-ec80-4d8e-bc67-9af39698a13c.png)
+
+
