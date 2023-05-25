@@ -1,18 +1,3 @@
-/*
-  Rui Santos
-  Complete project details at our blog: https://RandomNerdTutorials.com/esp32-esp8266-firebase-bme280-rtdb/
-  Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files.
-  The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
-*/
-
-//#include <Arduino.h>
-//#if defined(ESP32)
-//  #include <WiFi.h>
-//#elif defined(ESP8266)
-//  #include <ESP8266WiFi.h>
-//#endif
-//#include <Firebase_ESP_Client.h>
-//#include <Wire.h>
 
 //Include the library
 #include <Arduino.h>
@@ -28,12 +13,11 @@
 #include <FirebaseESP8266.h>
 #endif
 
+int timestamp;
 #include <MQUnifiedsensor.h>
 #include "time.h"
 
-#include <AsyncTCP.h>
-#include <ESPAsyncWebServer.h>
-#include "SPIFFS.h"
+
 #include <Arduino_JSON.h>
 
 
@@ -70,19 +54,18 @@ String uid;
 
 // Variables to save database paths
 String databasePath;
-String getSensorReadings_MQ2_1_Path;
-String getSensorReadings_MQ2_2_Path;
-String getSensorReadings_MQ2_3_Path;
-
-
+String parentPath;
+String timePath = "/timestamp";
+String MQ2_H2Path = "/H2";
+String MQ2_AlcPath = "/Alc";
+String MQ2_PropPath = "/Prop";
+String MQ2_LPGPath = "/LPG";
+String MQ2_COPath = "/CO";
 
 
 /************************Hardware Related Macros************************************/
 #define         Board                   ("ESP32")
 #define         Pin33                     (33)  //Analog input 3 of your arduino
-//#define         Pin25                     (25)
-//#define         Pin26                     (26)
-//#define         Pin27                     (27)
 /***********************Software Related Macros************************************/
 #define         Type                    ("MQ-2") //MQ2
 #define         Voltage_Resolution      (3.3)
@@ -91,29 +74,16 @@ String getSensorReadings_MQ2_3_Path;
 
 
 
-// Create AsyncWebServer object on port 80
-AsyncWebServer server(80);
-
-// Create an Event Source on /events
-AsyncEventSource events("/events");
-
-
-// Json Variable to Hold Sensor Readings
-JSONVar readings_mq2_1;
-JSONVar readings_mq2_2;
-JSONVar readings_mq2_3;
-
 // Timer variables (send new readings every 30 secs)
 unsigned long lastTime = 0;
 unsigned long timerDelay = 500;
 
+//Too get time from this server
+const char* ntpServer = "pool.ntp.org";
 
-#define FORMAT_SPIFFS_IF_FAILED true
 
 /*****************************Globals***********************************************/
 MQUnifiedsensor MQ2(Board, Voltage_Resolution, ADC_Bit_Resolution, Pin33, Type);
-//MQUnifiedsensor MQ2(Board, Voltage_Resolution, ADC_Bit_Resolution, Pin26, Type);
-//MQUnifiedsensor MQ2(Board, Voltage_Resolution, ADC_Bit_Resolution, Pin27, Type);
 /*****************************Globals***********************************************/
 
 // Initialize WiFi
@@ -128,15 +98,18 @@ void initWiFi() {
   Serial.println();
 }
 
-// Initialize SPIFFS
-void initSPIFFS() {
-  if (!SPIFFS.begin(FORMAT_SPIFFS_IF_FAILED)) {
-    Serial.println("An error has occurred while mounting SPIFFS");
+// Gets time so that we can see when the data is read
+unsigned long getTime() {
+  time_t now;
+  struct tm timeinfo;
+  if (!getLocalTime(&timeinfo)) {
+    Serial.println("Failed to obtain time");
+    return(0);
   }
-  else{
-    Serial.println("SPIFFS mounted successfully");
-  }
+  time(&now);
+  return now;
 }
+
 
 String readGasH2(){
    MQ2.update();
@@ -203,49 +176,12 @@ String readGasPropane(){
    }
 }
 
-String getSensorReadings_MQ2_1(){
-  readings_mq2_1["GasH2_MQ2_1"] = String(readGasH2());
-  readings_mq2_1["GasLPG_MQ2_1"] = String(readGasLPG());
-  readings_mq2_1["GasCO_MQ2_1"] = String(readGasCO());
-  readings_mq2_1["GasAlcohol_MQ2_1"] = String(readGasAlcohol());
-  readings_mq2_1["GasPropane_MQ2_1"] = String(readGasPropane());
-  String jsonString = JSON.stringify(readings_mq2_1);
-  return jsonString;
-}
-
-
-String getSensorReadings_MQ2_2(){
-  readings_mq2_2["GasH2_MQ2_2"] = String(readGasH2());
-  readings_mq2_2["GasLPG_MQ2_2"] = String(readGasLPG());
-  readings_mq2_2["GasCO_MQ2_2"] = String(readGasCO());
-  readings_mq2_2["GasAlcohol_MQ2_2"] = String(readGasAlcohol());
-  readings_mq2_2["GasPropane_MQ2_2"] = String(readGasPropane());
-  String jsonString = JSON.stringify(readings_mq2_2);
-  return jsonString;
-}
-
-String getSensorReadings_MQ2_3(){
-  readings_mq2_3["GasH2_MQ2_3"] = String(readGasH2());
-  readings_mq2_3["GasLPG_MQ2_3"] = String(readGasLPG());
-  readings_mq2_3["GasCO_MQ2_3"] = String(readGasCO());
-  readings_mq2_3["GasAlcohol_MQ2_3"] = String(readGasAlcohol());
-  readings_mq2_3["GasPropane_MQ2_3"] = String(readGasPropane());
-  String jsonString = JSON.stringify(readings_mq2_3);
-  return jsonString;
-}
-
-
-
-
 
 
 void setup(){
-  Serial.begin(115200);
-
-  // Initialize BME280 sensor
   Serial.begin(115200); //Init serial port
   initWiFi();
-  initSPIFFS();
+  configTime(0, 0, ntpServer);
   MQ2.init(); 
   MQ2.setRegressionMethod(1); //_PPM =  a*ratio^b
 
@@ -272,46 +208,7 @@ void setup(){
   /*****************************  MQ CAlibration ********************************************/ 
 
 
-  // Route for root / web page
-  server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
-    request->send(SPIFFS, "/index.html", "text/html");
-  });
-  
-  server.serveStatic("/", SPIFFS, "/");
-
-  
-   server.on("/readings_MQ2_1", HTTP_GET, [](AsyncWebServerRequest *request){
-    String json = getSensorReadings_MQ2_1();
-    request->send(200, "application/json", json);
-    json = String();
-  });
-
-    server.on("/readings_MQ2_2", HTTP_GET, [](AsyncWebServerRequest *request){
-    String json = getSensorReadings_MQ2_2();
-    request->send(200, "application/json", json);
-    json = String();
-  });
-
-  server.on("/readings_MQ2_3", HTTP_GET, [](AsyncWebServerRequest *request){
-    String json = getSensorReadings_MQ2_3();
-    request->send(200, "application/json", json);
-    json = String();
-  });
-
-
-  events.onConnect([](AsyncEventSourceClient *client){
-    if(client->lastId()){
-      Serial.printf("Client reconnected! Last message ID that it got is: %u\n", client->lastId());
-    }
-    // send event with message "hello!", id current millis
-    // and set reconnect delay to 1 second
-    client->send("hello!", NULL, millis(), 10000);
-  });
-  server.addHandler(&events);
-
-  
-  // Start server
-  server.begin();
+ 
   // Assign the api key (required)
   config.api_key = API_KEY;
 
@@ -322,8 +219,7 @@ void setup(){
   // Assign the RTDB URL (required)
   config.database_url = DATABASE_URL;
 
-  Firebase.reconnectWiFi(true);
-  fbdo.setResponseSize(4096);
+
 
   // Assign the callback function for the long running token generation task */
   config.token_status_callback = tokenStatusCallback; //see addons/TokenHelper.h
@@ -345,36 +241,37 @@ void setup(){
   Serial.print("User UID: ");
   Serial.println(uid);
 
-
-  // Update database path for sensor readings
-  getSensorReadings_MQ2_1_Path = "/getSensorReadings_MQ2_1"; // --> UsersData/<user_uid>/temperature
-  getSensorReadings_MQ2_2_Path = "/getSensorReadings_MQ2_2"; // --> UsersData/<user_uid>/humidity
-  getSensorReadings_MQ2_3_Path = "/getSensorReadings_MQ2_3"; // --> UsersData/<user_uid>/pressure
+    // Update database path
+  databasePath = "/UsersData/" + uid + "/readings";
  
 }
 
 void loop() {
     if (Firebase.ready() && (millis() - lastTime) > timerDelay || lastTime == 0) {
     // Send Events to the client with the Sensor Readings Every 500 milis seconds
-
-    events.send("ping",NULL,millis());
-    events.send(getSensorReadings_MQ2_1().c_str(),"new_readings_MQ2_1" ,millis());
-    events.send(getSensorReadings_MQ2_2().c_str(),"new_readings_MQ2_2" ,millis());
-    events.send(getSensorReadings_MQ2_3().c_str(),"new_readings_MQ2_3" ,millis());
+     lastTime = millis();
+    
    
-    lastTime = millis();
-    Serial.println("lastTime");
-    Serial.println(lastTime);
+   
 
-    databasePath = "/UsersData/" + uid + "/" + String(lastTime);
-    
-    json.set(getSensorReadings_MQ2_1_Path.c_str(),getSensorReadings_MQ2_1());
-    json.set(getSensorReadings_MQ2_2_Path.c_str(),getSensorReadings_MQ2_2());
-    json.set(getSensorReadings_MQ2_3_Path.c_str(),getSensorReadings_MQ2_3());
+    timestamp = getTime();
+    Serial.print ("time: ");
+    Serial.println (timestamp);
 
+    parentPath= databasePath + "/" + String(timestamp);
     
 
-    Serial.printf("Set json... %s\n", Firebase.RTDB.setJSON(&fbdo, databasePath.c_str(), &json) ? "ok" : fbdo.errorReason().c_str());  
+   
+    json.set(MQ2_H2Path.c_str(),readGasH2());
+    json.set(MQ2_AlcPath.c_str(),readGasAlcohol());
+    json.set(MQ2_PropPath.c_str(),readGasPropane());
+    json.set(MQ2_LPGPath.c_str(),readGasLPG());
+    json.set(MQ2_COPath.c_str(),readGasCO());
+    json.set(timePath, String(timestamp));
+  
+
+
+    Serial.printf("Set json... %s\n", Firebase.RTDB.setJSON(&fbdo, parentPath.c_str(), &json) ? "ok" : fbdo.errorReason().c_str());
 
 
     }
